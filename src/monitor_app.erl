@@ -5,7 +5,7 @@
 
 %% Application callbacks
 start(_StartType, _StartArgs) ->
-    Timeout = monitor:get_env(interval),
+    Timeout = monitor:get_env(update_interval),
     monitor_sup:start_link(Timeout).
 
 stop(_State) ->
