@@ -1,16 +1,12 @@
 -module(monitor_app).
-
 -behaviour(application).
 
-%% Application callbacks
 -export([start/2, stop/1]).
 
-%% ===================================================================
 %% Application callbacks
-%% ===================================================================
-
 start(_StartType, _StartArgs) ->
-    monitor_sup:start_link().
+    Timeout = monitor:get_env(interval),
+    monitor_sup:start_link(Timeout).
 
 stop(_State) ->
     ok.

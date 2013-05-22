@@ -1,28 +1,25 @@
 
 -module(monitor_sup).
-
 -behaviour(supervisor).
 
-%% API
--export([start_link/0]).
+-export([start_link/1]).
 
-%% Supervisor callbacks
 -export([init/1]).
 
-%% Helper macro for declaring children of supervisor
--define(CHILD(I, Type), {I, {I, start_link, []}, permanent, 5000, Type, [I]}).
-
-%% ===================================================================
 %% API functions
-%% ===================================================================
+start_link(Timeout) ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, Timeout).
 
-start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
-
-%% ===================================================================
 %% Supervisor callbacks
-%% ===================================================================
+init(Timeout) ->
+    Strategy = {one_for_one, 5, 10},
+    Processes = [child_spec(monitor_loop, Timeout)],
+    {ok, {Strategy, Processes}}.
 
-init([]) ->
-    {ok, { {one_for_one, 5, 10}, []} }.
-
+child_spec(M, Timeout) ->
+    {M,
+     {M, start_link, [Timeout]},
+     permanent,
+     5000,
+     worker,
+     [M]}.
