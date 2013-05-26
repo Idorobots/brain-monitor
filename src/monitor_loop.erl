@@ -2,45 +2,53 @@
 
 -export([start_link/1, loop/1]).
 
+-record(state, {timeout, swt, metrics}).
+
 start_link(Timeout) ->
-    init(Timeout),
-    Pid = spawn_link(?MODULE, loop, [Timeout]),
+    Pid = spawn_link(?MODULE, loop, [init(Timeout)]),
     {ok, Pid}.
 
-init(_Timeout) ->
+init(Timeout) ->
     erlang:system_flag(scheduler_wall_time, true),
+    SWT = lists:sort(erlang:statistics(scheduler_wall_time)),
     lists:map(fun (Metric) ->
                       folsom_metrics:new_histogram(Metric, slide, monitor:get_env(window))
               end,
               [cpu_utilization | monitor:get_env(metrics)]),
-    ok.
+    Metrics = monitor:get_env(metrics), % Pass metrics along the loop not to invoke get_env too much.
+    #state{timeout = Timeout, swt = SWT, metrics = Metrics}.
 
 %% Internal functions
 loop(State) ->
-    Timeout = State,
+    Timeout = State#state.timeout,
     receive
     after
         Timeout -> case handle(State) of
-                       {ok, State}   -> loop(State);
-                       {stop, State} -> State
+                       {ok, NewState}   -> loop(NewState);
+                       {stop, NewState} -> NewState
                    end
     end.
 
-handle(Timeout) ->
-    Metrics = monitor:get_env(metrics),
+handle(State) ->
+    Metrics = State#state.metrics,
 
-    %% TODO Deuglify
     VMStatFuncs = [fun folsom_vm_metrics:get_memory/0,
                    fun folsom_vm_metrics:get_statistics/0],
     lists:map(fun (Fun) ->
-                      Values = lists:filter(fun ({Metric, _Value}) ->
-                                                    lists:member(Metric, Metrics)
-                                            end,
-                                            Fun()),
-                      lists:map(fun folsom_metrics:notify/1, Values)
+                      lists:map(fun folsom_metrics:notify/1,
+                                lists:filter(fun ({Metric, _Value}) ->
+                                                     lists:member(Metric, Metrics)
+                                             end,
+                                             Fun()))
               end,
               VMStatFuncs),
-    %% TODO Compute the actual utilization.
-    SWT = erlang:statistics(scheduler_wall_time),
-    folsom_metrics:notify({cpu_utilization, SWT}),
-    {ok, Timeout}.
+
+    %% Lastly, compute and update the CPU utilization.
+    LastSWT = State#state.swt,
+    NewSWT = lists:sort(erlang:statistics(scheduler_wall_time)),
+    CPUUtilization = lists:map(fun({{I, A0, T0}, {I, A1, T1}}) ->
+                                       {I, (A1-A0)/(T1-T0)}
+                               end,
+                               lists:zip(LastSWT, NewSWT)),
+    folsom_metrics:notify({cpu_utilization, CPUUtilization}),
+    {ok, State#state{swt = NewSWT}}.
