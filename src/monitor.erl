@@ -1,6 +1,6 @@
 -module(monitor).
 
--export([start/0, stop/0, get_env/1, stats/0, dump_stats/1]).
+-export([start/0, stop/0, get_env/1, stats/0, dump_stats/1, test/2]).
 
 start() ->
     lager:start(),
@@ -20,6 +20,10 @@ stats() ->
 dump_stats(Filename) ->
     Stats = stats(),
     ok = file:write_file(Filename, io_lib:format("~w", [Stats])).
+
+test(Timeout, Filename) ->
+    timer:sleep(Timeout * 1000),
+    dump_stats(Filename).
 
 get_env(Name) ->
     {ok, Value} = application:get_env(?MODULE, Name),
